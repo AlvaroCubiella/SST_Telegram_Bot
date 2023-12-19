@@ -1,0 +1,15 @@
+{
+    "Estacion":{
+        "Nombre":"MdP",
+        "Sensor":"SBE38"
+    },
+    "FTP":{
+        "Servidor":"ftp.inidep.edu.ar",
+        "Usuario":"oceanografia",
+        "Pass":"oceanus",
+        "Carpeta":"TSM"
+    },
+    "Telegram":{
+        "Nombre":"pp"
+    }
+}

@@ -1,0 +1,14 @@
+{ 
+    "MdP":{
+        "Nombre": "Estacion de observaciones costeras",
+        "Posicion": [-38.00063, -57.53845],
+        "Sensor": "SBE38"
+        },
+
+    "BNMdP":{
+        "Nombre": "Base Naval Mar del Plata",
+        "Posicion": [-38.03562, -57.53108],
+        "Sensor": "SBE38"
+        }
+    
+}
