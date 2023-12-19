@@ -6,6 +6,8 @@ import json
 import time
 import threading
 import requests
+import ast          # lo uso para convertir una cadena de estaciones (de la API) en diccionario
+import schedule
 
 import telebot
 from telebot.types import ForceReply
@@ -24,10 +26,36 @@ __version__ = "V 1 0"
 __date__ = "2023/12/12"
 __author__ = "Cubiella, Alvaro"
 
-global ftp_file_json, estacion_seleccionada
+global estaciones, estacion_seleccionada
+global user_id_admin
 
-ftp_file_json = {}
+estaciones = {}
 estacion_seleccionada = None
+user_admin = ()
+
+user_id_admin = (
+    5421431478,
+    )
+user_admin = (
+    'AlvaroCubiella',
+    )
+
+w_list=(
+    'AlvaroCubiella',
+    'EmmanuelZel',
+    'NoeManik4',
+    'Raul_Reta',
+    'Jorge_fabrego',
+    'Harold_Fenco',
+    'gnmolinari',
+    )
+
+# Lista de comandos para usuarios
+w_cmd_lit = (
+    'start',
+    'info',
+    'help',
+    )
 
 # Establezco a partir de que nivel se imprimen los mensajes y formato
 logging.basicConfig(level=logging.INFO,
@@ -73,30 +101,6 @@ def webhook():
         bot.process_new_updates([update])
         return "OK", 200
 
-#ftp.Conectar()
-#ftp.GetFile(file='MdPSBE3820231211.txt')
-
-user_id_admin = (
-    5421431478,
-    )
-user_admin = (
-    'AlvaroCubiella',
-    )
-
-w_list=(
-    'AlvaroCubiella',
-    'EmmanuelZel',
-    'NoeManik4',
-    'Raul_Reta',
-    )
-
-# Lista de comandos para usuarios
-w_cmd_lit = (
-    'start',
-    'info',
-    'help',
-    )
-
 bot = telebot.TeleBot(TOKEN_TELEGRAM_BOT)
 
 # Decorador para verificar si el usuario está autorizado
@@ -107,8 +111,13 @@ def usuario_autorizado(func):
         if str(user_id) in w_list or username in w_list:
             func(message)
         else:
-            bot.reply_to(message, "Lo siento, no estás autorizado para ejecutar este comando.")
-            logging.error(f"El usuario {message.chat.username} con ID: {message.from_user.id} fue rechazado")
+            if message.chat.username is None:
+                bot.reply_to(message, f"Debe establecer un nombre de usuario Telegram para continuar", parse_mode="HTML")
+            else:
+                bot.reply_to(message, "Lo siento, no estás autorizado para ejecutar este comando.")
+                logging.error(f"El usuario {message.chat.username} con ID: {message.from_user.id} fue rechazado")
+                mensaje = f"Solicitud del usuario {message.chat.username} ID: {message.from_user.id}"
+                bot.send_message(5421431478, mensaje)
     return verificar_usuario
 
 # Decorador para verificar si el usuario es el administrador
@@ -117,31 +126,31 @@ def is_admin(func):
         user_id = message.from_user.id
         username = message.chat.username
         if str(user_id) in user_id_admin or username in user_admin:
-            func(message)
+            authorized = True
+            func(message, authorized)
         else:
-            bot.reply_to(message, "Lo siento, no estás autorizado para ejecutar este comando.")
-            logging.error(f"El usuario {message.chat.username} con ID: {message.from_user.id} fue rechazado")
+            authorized = False
+            if func.__name__ != 'cmd_botones':
+                bot.send_message(message.chat.id, "Lo siento, no estás autorizado para ejecutar este comando.")
+                logging.error(f"El usuario {message.chat.username} con ID: {message.from_user.id} fue rechazado")
+            func(message, authorized)
     return verificar_admin
 
 @bot.message_handler(commands=["start"])
 @usuario_autorizado
 def cmd_start(message):
-    if not message.chat.username in w_list:
-        bot.reply_to(message.chat.id, f"Hola <b>{message.chat.username}</b>\nLamentablemente no dispone de los privilegios para poder asistirlo", parse_mode="HTML")
-        bot.kick_chat_member(message.chat.id, message.from_user.id)
-    else:
-        cadena = f'Bienvenido <b>{message.chat.username}</b>\n'
-        cadena += f'Soy SST_Bot, en que puedo ayudarlo?' + '\n\n'
-        cadena += f'Menu de opciones' + '\n'
-        #bot.send_message(message.chat.id, cadena, parse_mode="HTML")
-        time.sleep(0.25)
-        """ Muestra un mensaje con los botonos de comandos inline (dentro del chat) """
-        markup = InlineKeyboardMarkup(row_width=2)              # Botones por linea por defecto 3
-        btn_estaciones = InlineKeyboardButton("Ver Estaciones", callback_data="estaciones")
-        btn_ayuda = InlineKeyboardButton("Ayuda", callback_data="ayuda")
-        btn_cerrar = InlineKeyboardButton("Cerrar", callback_data="cerrar")
-        markup.add(btn_estaciones, btn_ayuda, btn_cerrar)
-        bot.send_message(message.chat.id, cadena, parse_mode="HTML", reply_markup=markup)
+    cadena = f'Bienvenido <b>{message.chat.username}</b>\n'
+    cadena += f'Soy SST_Bot, en que puedo ayudarlo?' + '\n\n'
+    cadena += f'Menu de opciones' + '\n'
+    #bot.send_message(message.chat.id, cadena, parse_mode="HTML")
+    time.sleep(0.25)
+    """ Muestra un mensaje con los botonos de comandos inline (dentro del chat) """
+    markup = InlineKeyboardMarkup(row_width=2)              # Botones por linea por defecto 3
+    btn_estaciones = InlineKeyboardButton("Ver Estaciones", callback_data="estaciones")
+    btn_ayuda = InlineKeyboardButton("Información", callback_data="info")
+    btn_cerrar = InlineKeyboardButton("Cerrar", callback_data="cerrar")
+    markup.add(btn_estaciones, btn_ayuda, btn_cerrar)
+    bot.send_message(message.chat.id, cadena, parse_mode="HTML", reply_markup=markup)
 
 @bot.message_handler(commands=["help"])
 @usuario_autorizado
@@ -164,21 +173,23 @@ def cmd_help(message):
 @usuario_autorizado
 def cmd_info(message):
     cadena = __GetInfo()
-    bot.reply_to(message, cadena, parse_mode="MarkdownV2")
+    bot.send_message(message.chat.id, cadena, parse_mode="MarkdownV2")
 
 @bot.message_handler(commands=["alta"])
 @is_admin
-def cmd_alta(message):
-    markup = ForceReply()
-    msg = bot.send_message(message.chat.id, "Nombre del nuevo usuario:", reply_markup = markup)
-    bot.register_next_step_handler(msg, nuevo_usuario)
+def cmd_alta(message, authorized):
+    if authorized:
+        markup = ForceReply()
+        msg = bot.send_message(message.chat.id, "Nombre del nuevo usuario:", reply_markup = markup)
+        bot.register_next_step_handler(msg, nuevo_usuario)
 
 @bot.message_handler(commands=["baja"])
 @is_admin
-def cmd_baja(message):
-    markup = ForceReply()
-    msg = bot.send_message(message.chat.id, "Nombre del usuario a eliminar:", reply_markup = markup)
-    bot.register_next_step_handler(msg, baja_usuario)
+def cmd_baja(message, authorized):
+    if authorized:
+        markup = ForceReply()
+        msg = bot.send_message(message.chat.id, "Nombre del usuario a eliminar:", reply_markup = markup)
+        bot.register_next_step_handler(msg, baja_usuario)
 
 def nuevo_usuario(message):
     usuario = message.text
@@ -191,16 +202,23 @@ def baja_usuario(message):
     bot.send_message(message.chat.id, f'Usuario *{usuario}* eliminado', parse_mode="MarkdownV2")
 
 @bot.message_handler(commands=["bot_estaciones"])
-@usuario_autorizado
-def cmd_botones(message):
-    global ftp_file_json, estacion_seleccionada
+@is_admin
+def cmd_botones(message, authorized):
+    global estaciones, estacion_seleccionada
     """ Muestra un mensaje con los botonos de comandos inline (dentro del chat) """
-    ftp.Conectar()
-    carpetas = ftp.GetFolders()
-    ftp_file_json = ftp.ReadFile(ftp.root, file='folders.json')
+    if authorized:
+        url = "https://sst-api-ac6y.onrender.com/actualizar-ftp_admins"
+    else:
+        url = "https://sst-api-ac6y.onrender.com/actualizar-ftp"
+    ftp_file_json = requests.get(url)
+    if ftp_file_json.status_code != 200:
+        print()
+    estaciones = ftp_file_json.json()
+    estaciones['estaciones'] = ast.literal_eval(estaciones['estaciones'])
+    estaciones = estaciones['estaciones']
     markup = InlineKeyboardMarkup(row_width=2)              # Botones por linea por defecto 3
     # Crear botones dinámicamente según la información del archivo JSON
-    for key, value in ftp_file_json.items():
+    for key, value in estaciones.items():
         callback_data = f"{key}"
         button = InlineKeyboardButton(key, callback_data=callback_data)
         markup.add(button)
@@ -222,11 +240,11 @@ def cmd_btn_aciones(message):
 @bot.callback_query_handler(func= lambda x: True)
 def repuesta_botones_inline(call):
     """Gestiono las acciones de los botones inline"""
-    global ftp_file_json, estacion_seleccionada
+    global estaciones, estacion_seleccionada
     chat_id = call.from_user.id
     message_id = call.message.id
     username = call.from_user.username
-    if call.data in set(ftp_file_json):
+    if call.data in set(estaciones):
         estacion_seleccionada = call.data
         mostrar_info_estacion(chat_id, message_id, username)
     elif call.data == "estaciones":
@@ -240,26 +258,30 @@ def repuesta_botones_inline(call):
         estacion_seleccionada = None
         bot.delete_message(chat_id, message_id) 
         cmd_botones(call.message)
+    elif call.data == 'info':
+        estacion_seleccionada = None
+        bot.delete_message(chat_id, message_id) 
+        cmd_info(call.message)    
 
 def mostrar_info_estacion(chat_id, message_id, username):
     global estacion_seleccionada
-    if estacion_seleccionada in ftp_file_json:
-        info_estacion = ftp_file_json.get(estacion_seleccionada)
-        mensaje = f"<b>Información de la Estación {estacion_seleccionada}</b>\n\n"
-        latitud = info_estacion['Posicion'][0]
-        longitud = info_estacion['Posicion'][1]
-        fecha = datetime.datetime.now().date()
-        file = f"{estacion_seleccionada}{info_estacion.get('Sensor')}{fecha.year}{fecha.month}{fecha.day}.txt"
-        ftp.Conectar()
-        ftp_file = ftp.ReadFiletxt(f"{ftp.root}/{estacion_seleccionada}", file=file)
-        ftp.close()
-        for clave, valor in info_estacion.items():
-            mensaje += f"<b>{clave}:</b> {valor}\n"
-        scan = ftp_file[-1].split(",")
-        valor = f"<b>Ultimo registro:</b> {scan[1]}\n<b>Valor:</b> {scan[2]}\n"
+    if estacion_seleccionada in estaciones:
+        estacion = estaciones.get(estacion_seleccionada)
+        mensaje = f"<b>Información de la Estación {estacion_seleccionada}</b> ❌\n\n"
+        if estacion['info']['estado']:
+            mensaje = f"<b>Información de la Estación {estacion_seleccionada}</b> ✅\n\n"
+        latitud = "{:.3f}".format(estacion['Posicion'][0])
+        longitud = "{:.3f}".format(estacion['Posicion'][1])
+        actualizado = estacion['date_update']
+        for clave, valor in estacion.items():
+            if clave != "info" and clave != "date_update" and clave != "Posicion":
+                mensaje += f"<b>{clave}:</b> {valor}\n"
+        mensaje += f"<b>Ultima actualización:</b> {actualizado}\n"
+        valor = f"<b>Ultimo registro:</b> {estacion['info']['fecha']} {estacion['info']['hora']}\n<b>Valor:</b> {estacion['info']['dato']}\n"
         mensaje += valor
+        mensaje += f"<b>Coordenadas:</b> [{latitud}, {longitud}]\n"
         # <a href="https://www.Tecnonucleous.com/">Tecnonucleous</a>
-        mensaje += f" <a href='https://www.google.com/maps?q={latitud},{longitud}'>Coordenadas</a>"
+        mensaje += f" <a href='https://www.google.com/maps?q={estacion['Posicion'][0]},{estacion['Posicion'][1]}'>Coordenadas</a>"
         # Botón para volver al menú de estaciones
         markup = InlineKeyboardMarkup().add(InlineKeyboardButton("Volver a la lista de estaciones", callback_data="volver"))
         # <a href="https://www.Tecnonucleous.com/">Tecnonucleous</a>
@@ -288,10 +310,44 @@ def __GetInfo():
     cadena += f'*Update:* {__date__}' + '\n'
     return cadena
 
+# Función para enviar el mensaje
+def enviar_mensaje(access = 'users'):
+    url = "https://sst-api-ac6y.onrender.com/actualizar-ftp_admins"
+    ftp_file_json = requests.get(url)
+    if ftp_file_json.status_code != 200:
+        print()
+    estaciones = ftp_file_json.json()
+    estaciones['estaciones'] = ast.literal_eval(estaciones['estaciones'])
+    estaciones = estaciones['estaciones']
+    
+    # Recorro estacion por estacion
+    for i in estaciones:
+        # Mensaje a enviar
+        estacion = estaciones[i]
+        ico = f"⚠️"
+        if estacion['info']['estado']:
+            ico = f"✅"
+        mensaje = f"{ico} Reporte diario, estado de las estaciones de monitoreo de temperatura.\n\n"
+        mensaje += f"<b>Estado de la estacion</b> {estacion['Nombre']}\n"
+        mensaje += f"<b>Ultima actualización:</b> {estacion['date_update']}\n"
+        mensaje += f"<b>Ultimo registro:</b> {estacion['info']['fecha']} {estacion['info']['hora']}\n"
+        valor = "{:.3f}".format(float(estacion['info']['dato']))
+        mensaje += f"<b>Valor:</b> {valor}\n"
+
+        # ID del chat al que quieres enviar el mensaje
+        for chat_id in user_id_admin:
+            # Enviar el mensaje al chat específico
+            bot.send_message(chat_id, mensaje, parse_mode="HTML")
+
+def enviar_mensaje_admins():
+    enviar_mensaje(access = 'admin')
+
 # Función para programar el mensaje diario
 def programar_mensaje():
     #schedule.every().day.at("08:00").do(cmd_start)
-    schedule.every().minute.do(cmd_start)
+    schedule.every().day.at("08:00").do(enviar_mensaje)
+    schedule.every().day.at("20:00").do(enviar_mensaje_admins)
+    schedule.every(10).minutes.do(enviar_mensaje)
 
 # Ejecutar la programación del mensaje al inicio
 programar_mensaje()
@@ -300,11 +356,11 @@ programar_mensaje()
 def ejecutar_schedule():
     while True:
         schedule.run_pending()
-        time.sleep(1)
+        time.sleep(60)
 
 # Ejecutar el schedule en un hilo aparte
-#schedule_thread = threading.Thread(target=ejecutar_schedule)
-#schedule_thread.start()
+schedule_thread = threading.Thread(target=ejecutar_schedule)
+schedule_thread.start()
 
 if __name__ == "__main__":
     bot.set_my_commands([
@@ -335,6 +391,7 @@ if __name__ == "__main__":
     bot.set_webhook(url=ngrok_url)
     # Finalmente iniciamos el servidor
     serve(web_server, host="0.0.0.0", port = 5000)
+    programar_mensaje()
 
 
 
