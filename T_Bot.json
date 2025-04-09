@@ -4,10 +4,10 @@
         "Sensor":"SBE38"
     },
     "FTP":{
-        "Servidor":"ftp.inidep.edu.ar",
+        "Servidor":"oceanografia.inidep.edu.ar",
         "Usuario":"oceanografia",
         "Pass":"oceanus",
-        "Carpeta":"TSM"
+        "Carpeta":"data/TSM"
     },
     "Telegram":{
         "Nombre":"pp"
