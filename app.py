@@ -22,6 +22,7 @@ from waitress import serve
 
 from App.modulos import sst_server
 from App.modulos.utils import *
+from flask import Flask
 
 __version__ = "V 1 0"
 __date__ = "2023/12/12"
@@ -95,6 +96,9 @@ web_server = Flask(__name__)
 
 # Gestiona las peticiones POST enviadas al servidor web
 
+@web_server.route('/')
+def hello_world():
+    return 'Hello, World!'
 
 @web_server.route("/", methods=['POST'])
 def webhook():
@@ -421,3 +425,4 @@ if __name__ == "__main__":
     print(f"BOT SST Telegram iniciado version {__version__}")
     # Iniciar el servidor Flask
     serve(web_server, host="0.0.0.0", port=int(os.getenv('PORT', 5000)))
+    web_server.run(debug=True)
